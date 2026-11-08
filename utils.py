@@ -39,7 +39,7 @@ def package_versions():
     })
 
 
-# ================= Section 1: loading =================
+# Section 1: loading
 def load_data(name):
     """Return X (DataFrame with feature names), y (Series) and the class names."""
     if name == "breast_cancer":
@@ -60,3 +60,38 @@ def class_table(y, class_names):
         "n_samples": counts.values,
         "percent": (counts.values / len(y) * 100).round(2),
     })
+
+
+
+# Section 2: quality checks
+from scipy import stats
+
+
+def missing_table(X):
+    return pd.DataFrame({"feature": X.columns, "missing_count": X.isna().sum().values})
+
+
+def count_duplicates(X, y):
+    full = X.copy()
+    full["target"] = y
+    return int(full.duplicated().sum())
+
+
+def dtype_table(X):
+    return pd.DataFrame({"feature": X.columns, "dtype": X.dtypes.astype(str).values})
+
+
+def outlier_table(X):
+    """Count possible outliers with the IQR rule and |z| > 3. Nothing is deleted."""
+    rows = []
+    for col in X.columns:
+        v = X[col]
+        q1, q3 = v.quantile(0.25), v.quantile(0.75)
+        iqr = q3 - q1
+        low, high = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+        z = np.abs(stats.zscore(v))
+        rows.append({"feature": col,
+                     "iqr_lower": round(low, 4), "iqr_upper": round(high, 4),
+                     "n_iqr_outliers": int(((v < low) | (v > high)).sum()),
+                     "n_abs_z_gt_3": int((z > 3).sum())})
+    return pd.DataFrame(rows).sort_values("n_iqr_outliers", ascending=False)
