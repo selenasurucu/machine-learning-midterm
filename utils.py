@@ -1,7 +1,3 @@
-# utils.py
-# Functions shared by breast_cancer.ipynb and wine.ipynb.
-# Every function works on one dataset, so the two datasets stay separate.
-
 import os
 import platform
 
@@ -95,3 +91,70 @@ def outlier_table(X):
                      "n_iqr_outliers": int(((v < low) | (v > high)).sum()),
                      "n_abs_z_gt_3": int((z > 3).sum())})
     return pd.DataFrame(rows).sort_values("n_iqr_outliers", ascending=False)
+
+# Section 3: EDA
+def describe_features(X):
+    return pd.DataFrame({
+        "mean": X.mean(), "median": X.median(), "min": X.min(), "max": X.max(),
+        "std": X.std(), "Q1": X.quantile(0.25), "Q3": X.quantile(0.75),
+    }).round(4)
+
+
+def plot_class_distribution(y, class_names, dataset):
+    counts = y.value_counts().sort_index()
+    fig, ax = plt.subplots(figsize=(6, 4))
+    labels = [f"{i}: {class_names[i]}" for i in counts.index]
+    bars = ax.bar(labels, counts.values, color=sns.color_palette("Set2", len(counts)))
+    ax.bar_label(bars)
+    ax.set_title(f"{dataset} - class distribution (full dataset)")
+    ax.set_xlabel("Class (original label)")
+    ax.set_ylabel("Number of samples")
+    save_fig(fig, f"{dataset}_class_distribution.png")
+    plt.show()
+
+
+def plot_corr_heatmap(X, dataset):
+    corr = X.corr(method="pearson")
+    size = max(8, 0.45 * X.shape[1])
+    fig, ax = plt.subplots(figsize=(size, size * 0.85))
+    sns.heatmap(corr, cmap="coolwarm", vmin=-1, vmax=1, center=0, square=True,
+                annot=X.shape[1] <= 15, fmt=".2f", annot_kws={"size": 7},
+                cbar_kws={"shrink": 0.7}, ax=ax)
+    ax.set_title(f"{dataset} - Pearson feature correlation (full dataset)")
+    save_fig(fig, f"{dataset}_correlation_heatmap.png")
+    plt.show()
+    return corr
+
+
+def top_corr_pairs(corr, n=3):
+    """Strongest pairs by |r|. Only the upper triangle is used, so the diagonal
+    and mirrored pairs (A-B and B-A) are not counted."""
+    cols = corr.columns
+    rows = []
+    for i in range(len(cols)):
+        for j in range(i + 1, len(cols)):
+            r = corr.iloc[i, j]
+            rows.append({"feature_1": cols[i], "feature_2": cols[j],
+                         "pearson_r": round(r, 4), "abs_r": round(abs(r), 4)})
+    return (pd.DataFrame(rows).sort_values("abs_r", ascending=False)
+            .head(n).reset_index(drop=True))
+
+
+def plot_boxplots(X, dataset, per_figure):
+    """One small boxplot per feature, because the feature ranges are very different."""
+    cols = list(X.columns)
+    groups = [cols[i:i + per_figure] for i in range(0, len(cols), per_figure)]
+    for k, group in enumerate(groups, start=1):
+        nrows = int(np.ceil(len(group) / 5))
+        fig, axes = plt.subplots(nrows, 5, figsize=(16, 3.2 * nrows))
+        axes = np.array(axes).reshape(-1)
+        for ax, col in zip(axes, group):
+            ax.boxplot(X[col].values)
+            ax.set_title(col, fontsize=9)
+            ax.set_xticks([])
+        for ax in axes[len(group):]:
+            ax.axis("off")
+        fig.suptitle(f"{dataset} - boxplots ({k}/{len(groups)}), full dataset", y=1.01)
+        fig.tight_layout()
+        save_fig(fig, f"{dataset}_boxplots_{k}.png")
+        plt.show()
