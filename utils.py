@@ -388,3 +388,36 @@ def plot_param_curve(summary, dataset, algorithm, xlabel, filename):
     ax.legend(fontsize=8)
     save_fig(fig, filename)
     plt.show()
+
+    #Section 9: final test evaluation
+from sklearn.metrics import confusion_matrix, classification_report
+
+
+def plot_confusion(cm, class_names, title, filename):
+    """Counts, rows = Actual, columns = Predicted."""
+    fig, ax = plt.subplots(figsize=(5.5, 4.5))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False,
+                xticklabels=class_names, yticklabels=class_names, ax=ax)
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+    ax.set_title(title)
+    save_fig(fig, filename)
+    plt.show()
+
+
+def manual_metrics(cm, class_index, class_names):
+    cm = np.asarray(cm)
+    tp = cm[class_index, class_index]
+    fn = cm[class_index, :].sum() - tp     
+    fp = cm[:, class_index].sum() - tp      
+    tn = cm.sum() - tp - fn - fp
+    precision = tp / (tp + fp) if (tp + fp) > 0 else float("nan")   # nan = undefined
+    recall = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
+    if np.isnan(precision) or np.isnan(recall) or precision + recall == 0:
+        f1 = float("nan")
+    else:
+        f1 = 2 * precision * recall / (precision + recall)
+    return {"class": f"{class_index} ({class_names[class_index]})",
+            "TP": int(tp), "FP": int(fp), "FN": int(fn), "TN": int(tn),
+            "precision = TP/(TP+FP)": precision, "recall = TP/(TP+FN)": recall,
+            "F1 = 2PR/(P+R)": f1}
