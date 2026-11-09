@@ -421,3 +421,51 @@ def manual_metrics(cm, class_index, class_names):
             "TP": int(tp), "FP": int(fp), "FN": int(fn), "TN": int(tn),
             "precision = TP/(TP+FP)": precision, "recall = TP/(TP+FN)": recall,
             "F1 = 2PR/(P+R)": f1}
+
+from sklearn.metrics import roc_curve
+
+def plot_roc(dataset, model, X_test, y_test, class_names, filename):
+    proba = model.predict_proba(X_test)
+    classes = list(model.classes_)
+    fig, ax = plt.subplots(figsize=(6, 5))
+    aucs = {}
+    if dataset == "breast_cancer":
+        y_eval = (np.asarray(y_test) == 0).astype(int)
+        p = proba[:, classes.index(0)]
+        fpr, tpr, _ = roc_curve(y_eval, p)
+        auc = roc_auc_score(y_eval, p)
+        aucs["malignant (class 0) vs benign"] = auc
+        ax.plot(fpr, tpr, lw=2, label=f"malignant vs benign (AUC = {auc:.4f})")
+    else:
+        styles = ["-", "--", ":"]
+        for c in classes:
+            y_bin = (np.asarray(y_test) == c).astype(int)
+            p = proba[:, classes.index(c)]
+            fpr, tpr, _ = roc_curve(y_bin, p)
+            auc = roc_auc_score(y_bin, p)
+            aucs[f"class {c} ({class_names[c]}) vs rest"] = auc
+            ax.plot(fpr, tpr, lw=4 - c, linestyle=styles[c],
+                    label=f"class {c} ({class_names[c]}) vs rest (AUC = {auc:.4f})")
+        aucs["macro OvR AUC"] = roc_auc_score(y_test, proba, multi_class="ovr",
+                                              average="macro", labels=classes)
+    ax.plot([0, 1], [0, 1], "k--", lw=1, label="random guess")
+    ax.set_xlabel("False Positive Rate")
+    ax.set_ylabel("True Positive Rate")
+    ax.set_title(f"{dataset} - ROC curve on the fixed test set (seed-42 model)")
+    ax.legend(fontsize=8, loc="lower right")
+    save_fig(fig, filename)
+    plt.show()
+    return aucs
+
+def wrong_predictions(model, X_test, y_test, class_names):
+    pred = model.predict(X_test)
+    proba = model.predict_proba(X_test)
+    rows = []
+    for i in np.where(pred != np.asarray(y_test))[0]:
+        row = {"original_row_index": int(X_test.index[i]),
+               "actual": f"{y_test.iloc[i]} ({class_names[y_test.iloc[i]]})",
+               "predicted": f"{pred[i]} ({class_names[pred[i]]})"}
+        for j, c in enumerate(model.classes_):
+            row[f"P(class {c})"] = round(proba[i, j], 4)
+        rows.append(row)
+    return pd.DataFrame(rows)
