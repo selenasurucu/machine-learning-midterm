@@ -474,17 +474,13 @@ def wrong_predictions(model, X_test, y_test, class_names):
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 
-
 def safe_silhouette(X, clusters):
     k = len(np.unique(clusters))
     if k < 2 or k >= len(clusters):
         return float("nan"), f"N/A: {k} distinct cluster(s) for {len(clusters)} samples"
     return silhouette_score(X, clusters), "ok"
 
-
 def run_kmeans(dataset, reps, splits, n_clusters):
-    """2 representations x 3 seeds = 6 K-Means fits. Only training FEATURES are used
-    (no labels). Validation labels are used only afterwards, for ARI."""
     rows, kmeans_42 = [], {}
     for seed in SEEDS:
         y_val = splits[seed]["y_val"]
@@ -505,7 +501,6 @@ def run_kmeans(dataset, reps, splits, n_clusters):
                 kmeans_42[rep] = km
     return pd.DataFrame(rows), kmeans_42
 
-
 def summarize_kmeans(km_runs):
     rows = []
     for rep in REPRESENTATIONS:
@@ -520,3 +515,42 @@ def summarize_kmeans(km_runs):
                      "n_valid_silhouette_seeds": int(s["val_silhouette"].notna().sum()),
                      "n_seeds": len(s)})
     return pd.DataFrame(rows)
+
+from sklearn.feature_selection import f_classif
+
+def choose_two_features(X_train, y_train, max_abs_corr=0.8):
+    F, _ = f_classif(X_train, y_train)
+    order = np.argsort(F)[::-1]
+    first = X_train.columns[order[0]]
+    corr = X_train.corr()
+    for j in order[1:]:
+        candidate = X_train.columns[j]
+        if abs(corr.loc[first, candidate]) < max_abs_corr:
+            return first, candidate
+    return first, X_train.columns[order[1]]
+
+def plot_class_vs_cluster(X_plot, y_true, clusters, f1, f2, dataset, rep, class_names, filename):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
+    class_colors = sns.color_palette("Set1", len(class_names))
+    cluster_colors = sns.color_palette("Dark2", max(3, len(np.unique(clusters))))
+    for c in sorted(np.unique(y_true)):
+        m = np.asarray(y_true) == c
+        axes[0].scatter(X_plot.loc[m, f1], X_plot.loc[m, f2], s=30, alpha=0.8,
+                        color=class_colors[c], label=f"class {c} ({class_names[c]})")
+    for k in sorted(np.unique(clusters)):
+        m = clusters == k
+        axes[1].scatter(X_plot.loc[m, f1], X_plot.loc[m, f2], s=30, alpha=0.8,
+                        color=cluster_colors[k], marker="^", label=f"cluster {k}")
+    axes[0].set_title("True classes (test set)")
+    axes[1].set_title("Predicted K-Means cluster IDs (test set)")
+    suffix = " (scaled)" if rep == "scaled" else ""
+    for ax in axes:
+        ax.set_xlabel(f1 + suffix)
+        ax.legend(fontsize=8)
+        ax.grid(alpha=0.3)
+    axes[0].set_ylabel(f2 + suffix)
+    fig.suptitle(f"{dataset} - {rep} representation, seed-42 K-Means "
+                 "(2-D projection of a model fitted on all features)")
+    fig.tight_layout()
+    save_fig(fig, filename)
+    plt.show()
