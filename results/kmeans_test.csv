@@ -1,3 +1,5 @@
 dataset,representation,seed,test_cluster_counts,test_ari,test_silhouette,silhouette_note
 breast_cancer,unscaled,42,"[86, 28]",0.5584884553059529,0.7119990457943489,ok
 breast_cancer,scaled,42,"[74, 40]",0.7353808445227874,0.3250621931086193,ok
+wine,unscaled,42,"[14, 10, 12]",0.3733228463033219,0.49288000001742077,ok
+wine,scaled,42,"[13, 13, 10]",0.9087939960390535,0.27111968980089884,ok
