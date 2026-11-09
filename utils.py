@@ -158,3 +158,65 @@ def plot_boxplots(X, dataset, per_figure):
         fig.tight_layout()
         save_fig(fig, f"{dataset}_boxplots_{k}.png")
         plt.show()
+
+ #Section 4: splitting
+from sklearn.model_selection import train_test_split
+
+def make_splits(X, y):
+    """1) Reserve ONE fixed stratified 20% test set (random_state=42).
+    2) For every seed, split the remaining 80% into train/validation
+       (test_size=0.125 -> about 70% / 10% of the full data).
+    The original row indices are kept in the DataFrames/Series."""
+    X_rest, X_test, y_rest, y_test = train_test_split(
+        X, y, test_size=0.20, stratify=y, random_state=42)
+    splits = {}
+    for seed in SEEDS:
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_rest, y_rest, test_size=0.125, stratify=y_rest, random_state=seed)
+        splits[seed] = {"X_train": X_train, "X_val": X_val,
+                        "y_train": y_train, "y_val": y_val}
+    return splits, X_test, y_test
+
+def split_summary(splits, y_test, n_total, class_names):
+    """9 rows: (train, validation, test) x 3 seeds, with counts, % and class counts."""
+    rows = []
+    for seed in SEEDS:
+        for subset, ys in [("train", splits[seed]["y_train"]),
+                           ("validation", splits[seed]["y_val"]),
+                           ("test", y_test)]:
+            row = {"seed": seed, "subset": subset, "n": len(ys),
+                   "percent": round(len(ys) / n_total * 100, 2)}
+            for c in range(len(class_names)):
+                row[f"class_{c}_{class_names[c]}"] = int((ys == c).sum())
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+def check_splits(splits, X_test, n_total):
+    """No overlap inside a seed, and train + val + test = full dataset."""
+    test_idx = set(X_test.index)
+    rows = []
+    for seed in SEEDS:
+        tr = set(splits[seed]["X_train"].index)
+        va = set(splits[seed]["X_val"].index)
+        rows.append({"seed": seed,
+                     "train_val_overlap": len(tr & va),
+                     "train_test_overlap": len(tr & test_idx),
+                     "val_test_overlap": len(va & test_idx),
+                     "total_rows": len(tr) + len(va) + len(test_idx),
+                     "covers_full_dataset": len(tr | va | test_idx) == n_total})
+    return pd.DataFrame(rows)
+
+def save_split_indices(splits, X_test, dataset):
+    """Save the original row indices of every seed/subset to a CSV file."""
+    make_folders()
+    rows = []
+    for seed in SEEDS:
+        for subset, idx in [("train", splits[seed]["X_train"].index),
+                            ("validation", splits[seed]["X_val"].index),
+                            ("test", X_test.index)]:
+            rows.append({"dataset": dataset, "seed": seed, "subset": subset, "n": len(idx),
+                         "original_row_indices": " ".join(str(i) for i in sorted(idx))})
+    table = pd.DataFrame(rows)
+    path = os.path.join(RESULTS_DIR, f"{dataset}_split_indices.csv")
+    table.to_csv(path, index=False)
+    return table, path
