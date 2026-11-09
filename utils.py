@@ -469,3 +469,54 @@ def wrong_predictions(model, X_test, y_test, class_names):
             row[f"P(class {c})"] = round(proba[i, j], 4)
         rows.append(row)
     return pd.DataFrame(rows)
+
+# Section 10: K-Means clustering
+from sklearn.cluster import KMeans
+from sklearn.metrics import adjusted_rand_score, silhouette_score
+
+
+def safe_silhouette(X, clusters):
+    k = len(np.unique(clusters))
+    if k < 2 or k >= len(clusters):
+        return float("nan"), f"N/A: {k} distinct cluster(s) for {len(clusters)} samples"
+    return silhouette_score(X, clusters), "ok"
+
+
+def run_kmeans(dataset, reps, splits, n_clusters):
+    """2 representations x 3 seeds = 6 K-Means fits. Only training FEATURES are used
+    (no labels). Validation labels are used only afterwards, for ARI."""
+    rows, kmeans_42 = [], {}
+    for seed in SEEDS:
+        y_val = splits[seed]["y_val"]
+        for rep in REPRESENTATIONS:
+            X_train, X_val = reps[seed][rep]
+            km = KMeans(n_clusters=n_clusters, random_state=seed, n_init=10)
+            km.fit(X_train)                                   # no y_train here
+            val_clusters = km.predict(X_val)
+            sil, note = safe_silhouette(X_val, val_clusters)
+            rows.append({"dataset": dataset,
+                         "run_id": f"{dataset}_kmeans_{rep}_c{n_clusters}_s{seed}",
+                         "seed": seed, "representation": rep, "n_clusters": n_clusters,
+                         "n_init": 10, "train_inertia": km.inertia_,
+                         "val_ari": adjusted_rand_score(y_val, val_clusters),
+                         "val_silhouette": sil, "val_silhouette_note": note,
+                         "val_cluster_counts": str(np.bincount(val_clusters, minlength=n_clusters).tolist())})
+            if seed == 42:
+                kmeans_42[rep] = km
+    return pd.DataFrame(rows), kmeans_42
+
+
+def summarize_kmeans(km_runs):
+    rows = []
+    for rep in REPRESENTATIONS:
+        s = km_runs[km_runs["representation"] == rep]
+        rows.append({"dataset": s["dataset"].iloc[0], "representation": rep,
+                     "train_inertia_mean": s["train_inertia"].mean(),
+                     "train_inertia_std": s["train_inertia"].std(ddof=1),
+                     "val_ari_mean": s["val_ari"].mean(),
+                     "val_ari_std": s["val_ari"].std(ddof=1),
+                     "val_silhouette_mean": s["val_silhouette"].mean(skipna=True),
+                     "val_silhouette_std": s["val_silhouette"].std(ddof=1, skipna=True),
+                     "n_valid_silhouette_seeds": int(s["val_silhouette"].notna().sum()),
+                     "n_seeds": len(s)})
+    return pd.DataFrame(rows)
