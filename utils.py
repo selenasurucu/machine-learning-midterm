@@ -333,3 +333,58 @@ def train_all_models(dataset, reps, splits):
                 if seed == 42:
                     models_42[config_id] = model
     return pd.DataFrame(rows), models_42
+
+#Section 8: validation summary and model selection
+METRICS = ["train_accuracy", "train_macro_f1", "val_accuracy", "val_macro_precision",
+           "val_macro_recall", "val_macro_f1", "val_roc_auc"]
+
+
+def summarize_runs(runs):
+    """22 rows: mean and sample standard deviation (ddof=1) over the three seeds."""
+    keys = ["dataset", "config_id", "algorithm", "representation", "parameter",
+            "parameter_value"]
+    groups = runs.groupby(keys, sort=False)[METRICS]
+    mean = groups.mean().add_suffix("_mean")
+    std = groups.std(ddof=1).add_suffix("_std")
+    summary = pd.concat([mean, std], axis=1).reset_index()
+    summary["n_seeds"] = groups.size().values
+    ordered = keys + [c for m in METRICS for c in (m + "_mean", m + "_std")] + ["n_seeds"]
+    return summary[ordered]
+
+
+def select_config(summary):
+    """Highest mean validation macro-F1. Ties: higher mean validation accuracy,
+    then lower macro-F1 std, then alphabetical config ID."""
+    ranked = summary.sort_values(
+        ["val_macro_f1_mean", "val_accuracy_mean", "val_macro_f1_std", "config_id"],
+        ascending=[False, False, True, True]).reset_index(drop=True)
+    return ranked.iloc[0], ranked
+
+
+def plot_param_curve(summary, dataset, algorithm, xlabel, filename):
+    """Mean training and validation macro-F1 for every parameter value,
+    for both representations, with the seed std as error bars."""
+    sub = summary[summary["algorithm"] == algorithm]
+    order = [str(v) for v in (DT_DEPTHS if algorithm == "decision_tree" else KNN_KS)]
+    colors = {"unscaled": "tab:orange", "scaled": "tab:blue"}
+    x = np.arange(len(order))
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for rep in REPRESENTATIONS:
+        s = sub[sub["representation"] == rep].set_index("parameter_value").loc[order]
+        shift = -0.06 if rep == "unscaled" else 0.06
+        ax.errorbar(x + shift, s["train_macro_f1_mean"], yerr=s["train_macro_f1_std"],
+                    marker="o", linestyle="--", capsize=4, color=colors[rep],
+                    label=f"{rep} - training")
+        ax.errorbar(x + shift, s["val_macro_f1_mean"], yerr=s["val_macro_f1_std"],
+                    marker="s", linestyle="-", capsize=4, color=colors[rep],
+                    label=f"{rep} - validation")
+    ax.set_xticks(x)
+    ax.set_xticklabels(order)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Macro-F1 (mean over seeds 42, 52, 62)")
+    ax.set_title(f"{dataset} - {algorithm}: training vs validation macro-F1\n"
+                 "error bars = sample std across the three seeds")
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8)
+    save_fig(fig, filename)
+    plt.show()
