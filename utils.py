@@ -242,3 +242,94 @@ def scale_data(splits, X_test):
                                  columns=X_test.columns, index=X_test.index)
     test_reps = {"unscaled": X_test, "scaled": X_test_scaled}
     return reps, scalers, test_reps
+
+#Section 7: training the classifiers
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import (accuracy_score, precision_score, recall_score,
+                             f1_score, roc_auc_score)
+
+DT_DEPTHS = [2, 3, 5, 10, None]
+KNN_KS = [1, 3, 5, 7, 11]
+REPRESENTATIONS = ["unscaled", "scaled"]
+
+
+def model_grid():
+    """The 11 required settings: (algorithm, parameter name, value, short name)."""
+    grid = []
+    for d in DT_DEPTHS:
+        grid.append(("decision_tree", "max_depth", d, f"dt_{{rep}}_d{d}"))
+    for k in KNN_KS:
+        grid.append(("knn", "n_neighbors", k, f"knn_{{rep}}_k{k}"))
+    grid.append(("gaussian_nb", "default", "default", "gnb_{rep}"))
+    return grid
+
+
+def make_model(algorithm, value, seed):
+    if algorithm == "decision_tree":
+        return DecisionTreeClassifier(max_depth=value, random_state=seed)
+    if algorithm == "knn":
+        return KNeighborsClassifier(n_neighbors=value, weights="uniform", metric="euclidean")
+    return GaussianNB()
+
+
+def roc_auc(dataset, y_true, proba, model_classes):
+    model_classes = list(model_classes)
+    if dataset == "breast_cancer":
+        y_eval = (np.asarray(y_true) == 0).astype(int)   # 1 = malignant
+        p_malignant = proba[:, model_classes.index(0)]   # probability of class 0
+        return roc_auc_score(y_eval, p_malignant)
+    assert model_classes == [0, 1, 2], "probability columns must follow class order"
+    return roc_auc_score(y_true, proba, multi_class="ovr", average="macro",
+                         labels=model_classes)
+
+
+def undefined_note(y_true, y_pred, labels):
+    notes = []
+    y_true, y_pred = np.asarray(y_true), np.asarray(y_pred)
+    for c in labels:
+        if (y_pred == c).sum() == 0:
+            notes.append(f"precision undefined for class {c}")
+        if (y_true == c).sum() == 0:
+            notes.append(f"recall undefined for class {c}")
+    return "; ".join(notes) if notes else "none"
+
+
+def get_metrics(dataset, model, X, y, prefix):
+    y_pred = model.predict(X)
+    proba = model.predict_proba(X)
+    labels = list(model.classes_)
+    return {
+        f"{prefix}_accuracy": accuracy_score(y, y_pred),
+        f"{prefix}_macro_precision": precision_score(y, y_pred, average="macro", zero_division=0),
+        f"{prefix}_macro_recall": recall_score(y, y_pred, average="macro", zero_division=0),
+        f"{prefix}_macro_f1": f1_score(y, y_pred, average="macro", zero_division=0),
+        f"{prefix}_roc_auc": roc_auc(dataset, y, proba, model.classes_),
+        f"{prefix}_undefined_metrics": undefined_note(y, y_pred, labels),
+    }
+
+
+def train_all_models(dataset, reps, splits):
+    rows, models_42 = [], {}
+    for seed in SEEDS:
+        y_train, y_val = splits[seed]["y_train"], splits[seed]["y_val"]
+        for rep in REPRESENTATIONS:
+            X_train, X_val = reps[seed][rep]
+            for algorithm, param, value, name in model_grid():
+                config_id = f"{dataset}_" + name.format(rep=rep)
+                run_id = f"{config_id}_s{seed}"
+                model = make_model(algorithm, value, seed)
+                model.fit(X_train, y_train)
+                train_pred = model.predict(X_train)
+                row = {"dataset": dataset, "run_id": run_id, "config_id": config_id,
+                       "seed": seed, "algorithm": algorithm, "representation": rep,
+                       "parameter": param, "parameter_value": str(value),
+                       "train_accuracy": accuracy_score(y_train, train_pred),
+                       "train_macro_f1": f1_score(y_train, train_pred, average="macro",
+                                                  zero_division=0)}
+                row.update(get_metrics(dataset, model, X_val, y_val, "val"))
+                rows.append(row)
+                if seed == 42:
+                    models_42[config_id] = model
+    return pd.DataFrame(rows), models_42
