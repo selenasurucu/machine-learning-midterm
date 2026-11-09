@@ -220,3 +220,25 @@ def save_split_indices(splits, X_test, dataset):
     path = os.path.join(RESULTS_DIR, f"{dataset}_split_indices.csv")
     table.to_csv(path, index=False)
     return table, path
+
+
+
+#Section 5: preprocessing and scaling
+from sklearn.preprocessing import StandardScaler
+
+def scale_data(splits, X_test):
+    reps, scalers = {}, {}
+    for seed in SEEDS:
+        X_train, X_val = splits[seed]["X_train"], splits[seed]["X_val"]
+        scaler = StandardScaler().fit(X_train)          # training data only
+        X_train_scaled = pd.DataFrame(scaler.transform(X_train),
+                                      columns=X_train.columns, index=X_train.index)
+        X_val_scaled = pd.DataFrame(scaler.transform(X_val),
+                                    columns=X_val.columns, index=X_val.index)
+        scalers[seed] = scaler
+        reps[seed] = {"unscaled": (X_train, X_val),
+                      "scaled": (X_train_scaled, X_val_scaled)}
+    X_test_scaled = pd.DataFrame(scalers[42].transform(X_test),
+                                 columns=X_test.columns, index=X_test.index)
+    test_reps = {"unscaled": X_test, "scaled": X_test_scaled}
+    return reps, scalers, test_reps
