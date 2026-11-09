@@ -554,3 +554,20 @@ def plot_class_vs_cluster(X_plot, y_true, clusters, f1, f2, dataset, rep, class_
     fig.tight_layout()
     save_fig(fig, filename)
     plt.show()
+
+    #Export result files
+def save_combined_csv(df, filename):
+    """Write this dataset's rows into a CSV file that holds BOTH datasets.
+    Rows of the other dataset that are already in the file are kept, so after
+    running both notebooks (in any order) the file contains both datasets.
+    keep_default_na=False keeps the text "None" (max_depth=None) as "None"."""
+    make_folders()
+    path = os.path.join(RESULTS_DIR, filename)
+    dataset = df["dataset"].iloc[0]
+    if os.path.exists(path):
+        old = pd.read_csv(path, keep_default_na=False, na_values=[""])
+        old = old[old["dataset"] != dataset]
+        df = pd.concat([old, df], ignore_index=True)
+    df = df.sort_values("dataset", kind="stable").reset_index(drop=True)
+    df.to_csv(path, index=False)
+    return path, len(df)
