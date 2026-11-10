@@ -65,4 +65,4 @@ Open `breast_cancer.ipynb` and click **Restart**, then **Run All**. Then do the 
 ## Links
 - **Student:** Selena Sürücü - 23040102020
 - **Repo:** https://github.com/selenasurucu/machine-learning-midterm
-- **Video:**
+- **Video:** https://youtu.be/CbCbHezj6e8
